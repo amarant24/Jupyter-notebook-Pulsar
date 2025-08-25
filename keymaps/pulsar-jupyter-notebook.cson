@@ -1,0 +1,63 @@
+# Keymap for pulsar-jupyter-notebook package
+# These are Jupyter notebook style keybindings
+
+# Global shortcuts (when notebook is focused)
+'.notebook-editor':
+  # Cell execution
+  'shift-enter': 'jupyter-notebook:run-cell-and-select-next'
+  'ctrl-enter': 'jupyter-notebook:run-cell'
+  'alt-enter': 'jupyter-notebook:run-cell-and-insert-below'
+
+  # Cell management (command mode)
+  'a': 'jupyter-notebook:insert-cell-above'
+  'b': 'jupyter-notebook:insert-cell-below'
+  'd d': 'jupyter-notebook:delete-cell'
+  'x': 'jupyter-notebook:cut-cell'
+  'c': 'jupyter-notebook:copy-cell'
+  'v': 'jupyter-notebook:paste-cell-below'
+  'shift-v': 'jupyter-notebook:paste-cell-above'
+
+  # Cell type changes
+  'y': 'jupyter-notebook:change-cell-type-code'
+  'm': 'jupyter-notebook:change-cell-type-markdown'
+  'r': 'jupyter-notebook:change-cell-type-raw'
+
+  # Navigation
+  'up': 'jupyter-notebook:select-cell-above'
+  'down': 'jupyter-notebook:select-cell-below'
+  'k': 'jupyter-notebook:select-cell-above'
+  'j': 'jupyter-notebook:select-cell-below'
+
+  # Edit mode
+  'enter': 'jupyter-notebook:enter-edit-mode'
+  'escape': 'jupyter-notebook:enter-command-mode'
+
+  # Kernel operations
+  'i i': 'jupyter-notebook:interrupt-kernel'
+  '0 0': 'jupyter-notebook:restart-kernel'
+
+  # Save
+  'ctrl-s': 'core:save'
+  'cmd-s': 'core:save'
+
+# Windows/Linux specific
+'.platform-win32 .notebook-editor, .platform-linux .notebook-editor':
+  'ctrl-shift-enter': 'jupyter-notebook:run-cell-and-insert-below'
+  'ctrl-shift-p': 'command-palette:toggle'
+
+# macOS specific
+'.platform-darwin .notebook-editor':
+  'cmd-shift-enter': 'jupyter-notebook:run-cell-and-insert-below'
+  'cmd-shift-p': 'command-palette:toggle'
+
+# Code cell specific (when editing code)
+'.notebook-editor .notebook-cell.code-cell atom-text-editor':
+  'tab': 'jupyter-notebook:indent-or-complete'
+  'shift-tab': 'jupyter-notebook:show-tooltip'
+  'ctrl-/': 'editor:toggle-line-comments'
+  'cmd-/': 'editor:toggle-line-comments'
+
+# Markdown cell specific
+'.notebook-editor .notebook-cell.markdown-cell atom-text-editor':
+  'shift-enter': 'jupyter-notebook:render-markdown'
+  'ctrl-enter': 'jupyter-notebook:render-markdown'

@@ -1,0 +1,82 @@
+# Menus for pulsar-jupyter-notebook package
+
+'context-menu':
+  '.notebook-editor':
+    'Insert Cell Above': 'jupyter-notebook:insert-cell-above'
+    'Insert Cell Below': 'jupyter-notebook:insert-cell-below'
+    'Delete Cell': 'jupyter-notebook:delete-cell'
+    '-': '-'
+    'Run Cell': 'jupyter-notebook:run-cell'
+    'Run All Cells': 'jupyter-notebook:run-all-cells'
+    '-': '-'
+    'Change Cell Type':
+      'Code Cell': 'jupyter-notebook:change-cell-type-code'
+      'Markdown Cell': 'jupyter-notebook:change-cell-type-markdown'
+      'Raw Cell': 'jupyter-notebook:change-cell-type-raw'
+
+'menu': [
+  {
+    'label': 'Packages'
+    'submenu': [
+      {
+        'label': 'Jupyter Notebook'
+        'submenu': [
+          {
+            'label': 'New Notebook'
+            'command': 'jupyter-notebook:new'
+          }
+          {
+            'label': 'Open Notebook'
+            'command': 'jupyter-notebook:open'
+          }
+          {
+            'type': 'separator'
+          }
+          {
+            'label': 'Run Cell'
+            'command': 'jupyter-notebook:run-cell'
+          }
+          {
+            'label': 'Run All Cells'
+            'command': 'jupyter-notebook:run-all-cells'
+          }
+          {
+            'label': 'Restart Kernel'
+            'command': 'jupyter-notebook:restart-kernel'
+          }
+          {
+            'type': 'separator'
+          }
+          {
+            'label': 'Insert Cell Above'
+            'command': 'jupyter-notebook:insert-cell-above'
+          }
+          {
+            'label': 'Insert Cell Below'
+            'command': 'jupyter-notebook:insert-cell-below'
+          }
+          {
+            'label': 'Delete Cell'
+            'command': 'jupyter-notebook:delete-cell'
+          }
+          {
+            'type': 'separator'
+          }
+          {
+            'label': 'Kernel Gateway'
+            'submenu': [
+              {
+                'label': 'Start Kernel Gateway'
+                'command': 'jupyter-notebook:start-kernel-gateway'
+              }
+              {
+                'label': 'Stop Kernel Gateway'
+                'command': 'jupyter-notebook:stop-kernel-gateway'
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+]

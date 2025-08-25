@@ -1,0 +1,77 @@
+{
+  "name": "pulsar-jupyter-notebook",
+  "main": "./lib/main",
+  "version": "1.0.0",
+  "description": "Jupyter Notebook support for Pulsar - view and edit .ipynb files natively",
+  "keywords": [
+    "jupyter",
+    "notebook",
+    "ipynb",
+    "python",
+    "data-science",
+    "pulsar"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/amarant24/pulsar-jupyter-notebook.git"
+  },
+  "license": "MIT",
+  "engines": {
+    "pulsar": ">=1.0.0 <2.0.0"
+  },
+  "dependencies": {
+    "flux": "^4.0.4",
+    "immutable": "^4.3.4",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "ws": "^8.14.2",
+    "uuid": "^9.0.1"
+  },
+  "devDependencies": {
+    "@babel/core": "^7.23.0",
+    "@babel/preset-env": "^7.23.0",
+    "@babel/preset-react": "^7.22.0",
+    "babel-loader": "^9.1.0",
+    "webpack": "^5.88.0"
+  },
+  "scripts": {
+    "build": "webpack --mode production",
+    "dev": "webpack --mode development --watch",
+    "test": "echo \"No tests specified\" && exit 0"
+  },
+  "activationCommands": {
+    "atom-workspace": "jupyter-notebook:open"
+  },
+  "consumedServices": {
+    "status-bar": {
+      "versions": {
+        "^1.0.0": "consumeStatusBar"
+      }
+    }
+  },
+  "deserializers": {
+    "NotebookEditor": "deserializeNotebookEditor"
+  },
+  "configSchema": {
+    "kernelGatewayUrl": {
+      "type": "string",
+      "default": "http://localhost:8888",
+      "description": "URL of the Jupyter Kernel Gateway server"
+    },
+    "startKernelGateway": {
+      "type": "boolean",
+      "default": true,
+      "description": "Automatically start Jupyter Kernel Gateway if not running"
+    },
+    "pythonPath": {
+      "type": "string",
+      "default": "python3",
+      "description": "Path to Python executable for Jupyter"
+    },
+    "maxOutputLines": {
+      "type": "integer",
+      "default": 1000,
+      "description": "Maximum number of output lines to display per cell"
+    }
+  }
+}

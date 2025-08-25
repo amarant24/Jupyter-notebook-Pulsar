@@ -1,0 +1,688 @@
+# Complete Pulsar Jupyter Notebook Package Structure
+# Save this as a reference and create the files/folders as shown below
+
+## Directory Structure:
+```
+pulsar-jupyter-notebook/
+├── package.json
+├── README.md
+├── LICENSE
+├── lib/
+│   ├── main.js
+│   ├── notebook-editor.js
+│   ├── dispatcher.js
+│   └── components/
+│       ├── notebook-editor-view.js
+│       ├── notebook-cell.js
+│       ├── text-editor.js
+│       └── display-area.js
+├── menus/
+│   └── pulsar-jupyter-notebook.cson
+├── keymaps/
+│   └── pulsar-jupyter-notebook.cson
+├── styles/
+│   └── notebook.less
+├── spec/
+│   └── pulsar-jupyter-notebook-spec.js
+└── webpack.config.js
+```
+
+## File Contents:
+
+### package.json
+```json
+{
+  "name": "pulsar-jupyter-notebook",
+  "main": "./lib/main",
+  "version": "1.0.0",
+  "description": "Jupyter Notebook support for Pulsar - view and edit .ipynb files natively",
+  "keywords": [
+    "jupyter",
+    "notebook",
+    "ipynb",
+    "python",
+    "data-science",
+    "pulsar"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/amarant24/pulsar-jupyter-notebook.git"
+  },
+  "license": "MIT",
+  "engines": {
+    "pulsar": ">=1.0.0 <2.0.0"
+  },
+  "dependencies": {
+    "flux": "^4.0.4",
+    "immutable": "^4.3.4",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "ws": "^8.14.2",
+    "uuid": "^9.0.1"
+  },
+  "devDependencies": {
+    "@babel/core": "^7.23.0",
+    "@babel/preset-env": "^7.23.0",
+    "@babel/preset-react": "^7.22.0",
+    "babel-loader": "^9.1.0",
+    "webpack": "^5.88.0"
+  },
+  "scripts": {
+    "build": "webpack --mode production",
+    "dev": "webpack --mode development --watch",
+    "test": "echo \"No tests specified\" && exit 0"
+  },
+  "activationCommands": {
+    "atom-workspace": "jupyter-notebook:open"
+  },
+  "consumedServices": {
+    "status-bar": {
+      "versions": {
+        "^1.0.0": "consumeStatusBar"
+      }
+    }
+  },
+  "deserializers": {
+    "NotebookEditor": "deserializeNotebookEditor"
+  },
+  "configSchema": {
+    "kernelGatewayUrl": {
+      "type": "string",
+      "default": "http://localhost:8888",
+      "description": "URL of the Jupyter Kernel Gateway server"
+    },
+    "startKernelGateway": {
+      "type": "boolean",
+      "default": true,
+      "description": "Automatically start Jupyter Kernel Gateway if not running"
+    },
+    "pythonPath": {
+      "type": "string",
+      "default": "python3",
+      "description": "Path to Python executable for Jupyter"
+    },
+    "maxOutputLines": {
+      "type": "integer",
+      "default": 1000,
+      "description": "Maximum number of output lines to display per cell"
+    }
+  }
+}
+```
+
+### lib/main.js
+```javascript
+const { CompositeDisposable } = require('atom');
+const NotebookEditor = require('./notebook-editor');
+const url = require('url');
+const { spawn } = require('child_process');
+
+module.exports = {
+  subscriptions: null,
+  statusBarTile: null,
+  kernelGatewayProcess: null,
+
+  activate() {
+    this.subscriptions = new CompositeDisposable();
+
+    // Register opener for .ipynb files
+    this.subscriptions.add(
+      atom.workspace.addOpener((uriToOpen) => {
+        const { protocol, pathname } = url.parse(uriToOpen);
+        if (protocol === 'pulsar-jupyter-notebook:' || pathname?.endsWith('.ipynb')) {
+          return new NotebookEditor(uriToOpen);
+        }
+      })
+    );
+
+    // Register commands
+    this.subscriptions.add(
+      atom.commands.add('atom-workspace', {
+        'jupyter-notebook:open': () => this.open(),
+        'jupyter-notebook:new': () => this.new(),
+        'jupyter-notebook:restart-kernel': () => this.restartKernel(),
+        'jupyter-notebook:start-kernel-gateway': () => this.startKernelGateway(),
+        'jupyter-notebook:stop-kernel-gateway': () => this.stopKernelGateway()
+      })
+    );
+
+    // Register deserializer for restoring notebooks on restart
+    atom.deserializers.add({
+      name: 'NotebookEditor',
+      deserialize: (state) => new NotebookEditor(state.filePath, state)
+    });
+
+    // Auto-start kernel gateway if configured
+    if (atom.config.get('pulsar-jupyter-notebook.startKernelGateway')) {
+      this.startKernelGateway();
+    }
+  },
+
+  deactivate() {
+    this.subscriptions?.dispose();
+    this.statusBarTile?.destroy();
+    this.stopKernelGateway();
+  },
+
+  consumeStatusBar(statusBar) {
+    this.statusBarTile = statusBar.addRightTile({
+      item: this.createStatusBarElement(),
+      priority: 100
+    });
+  },
+
+  createStatusBarElement() {
+    const element = document.createElement('div');
+    element.className = 'jupyter-status inline-block';
+    element.innerHTML = '<span class="icon icon-book">Jupyter</span>';
+    element.onclick = () => this.open();
+    return element;
+  },
+
+  open() {
+    atom.workspace.open('pulsar-jupyter-notebook://new');
+  },
+
+  new() {
+    const newNotebook = {
+      cells: [],
+      metadata: {
+        kernelspec: {
+          display_name: 'Python 3',
+          language: 'python',
+          name: 'python3'
+        }
+      },
+      nbformat: 4,
+      nbformat_minor: 4
+    };
+
+    const editor = new NotebookEditor();
+    editor.setText(JSON.stringify(newNotebook, null, 2));
+    atom.workspace.getActivePane().addItem(editor);
+  },
+
+  restartKernel() {
+    const activeItem = atom.workspace.getActivePaneItem();
+    if (activeItem instanceof NotebookEditor) {
+      activeItem.restartKernel();
+    }
+  },
+
+  startKernelGateway() {
+    if (this.kernelGatewayProcess) {
+      console.log('Jupyter Kernel Gateway is already running');
+      return;
+    }
+
+    const pythonPath = atom.config.get('pulsar-jupyter-notebook.pythonPath');
+    const gatewayUrl = atom.config.get('pulsar-jupyter-notebook.kernelGatewayUrl');
+    const port = new URL(gatewayUrl).port || '8888';
+
+    console.log('Starting Jupyter Kernel Gateway...');
+
+    this.kernelGatewayProcess = spawn(pythonPath, [
+      '-m', 'jupyter_kernel_gateway',
+      '--port', port,
+      '--allow-origin', '*',
+      '--allow-credentials', 'true'
+    ]);
+
+    this.kernelGatewayProcess.stdout.on('data', (data) => {
+      console.log(`Kernel Gateway: ${data}`);
+    });
+
+    this.kernelGatewayProcess.stderr.on('data', (data) => {
+      console.warn(`Kernel Gateway Error: ${data}`);
+    });
+
+    this.kernelGatewayProcess.on('close', (code) => {
+      console.log(`Kernel Gateway exited with code ${code}`);
+      this.kernelGatewayProcess = null;
+    });
+
+    // Update status bar
+    if (this.statusBarTile) {
+      const element = this.statusBarTile.getItem();
+      element.innerHTML = '<span class="icon icon-book text-success">Jupyter ●</span>';
+      element.title = 'Jupyter Kernel Gateway is running';
+    }
+  },
+
+  stopKernelGateway() {
+    if (this.kernelGatewayProcess) {
+      console.log('Stopping Jupyter Kernel Gateway...');
+      this.kernelGatewayProcess.kill();
+      this.kernelGatewayProcess = null;
+
+      // Update status bar
+      if (this.statusBarTile) {
+        const element = this.statusBarTile.getItem();
+        element.innerHTML = '<span class="icon icon-book">Jupyter</span>';
+        element.title = 'Click to open Jupyter notebook';
+      }
+    }
+  },
+
+  // Serialization support for Pulsar
+  serialize() {
+    return {
+      deserializer: 'NotebookEditor'
+    };
+  }
+};
+```
+
+### menus/pulsar-jupyter-notebook.cson
+```coffeescript
+# Menus for pulsar-jupyter-notebook package
+
+'context-menu':
+  '.notebook-editor':
+    'Insert Cell Above': 'jupyter-notebook:insert-cell-above'
+    'Insert Cell Below': 'jupyter-notebook:insert-cell-below'
+    'Delete Cell': 'jupyter-notebook:delete-cell'
+    '-': '-'
+    'Run Cell': 'jupyter-notebook:run-cell'
+    'Run All Cells': 'jupyter-notebook:run-all-cells'
+    '-': '-'
+    'Change Cell Type':
+      'Code Cell': 'jupyter-notebook:change-cell-type-code'
+      'Markdown Cell': 'jupyter-notebook:change-cell-type-markdown'
+      'Raw Cell': 'jupyter-notebook:change-cell-type-raw'
+
+'menu': [
+  {
+    'label': 'Packages'
+    'submenu': [
+      {
+        'label': 'Jupyter Notebook'
+        'submenu': [
+          {
+            'label': 'New Notebook'
+            'command': 'jupyter-notebook:new'
+          }
+          {
+            'label': 'Open Notebook'
+            'command': 'jupyter-notebook:open'
+          }
+          {
+            'type': 'separator'
+          }
+          {
+            'label': 'Run Cell'
+            'command': 'jupyter-notebook:run-cell'
+          }
+          {
+            'label': 'Run All Cells'
+            'command': 'jupyter-notebook:run-all-cells'
+          }
+          {
+            'label': 'Restart Kernel'
+            'command': 'jupyter-notebook:restart-kernel'
+          }
+          {
+            'type': 'separator'
+          }
+          {
+            'label': 'Insert Cell Above'
+            'command': 'jupyter-notebook:insert-cell-above'
+          }
+          {
+            'label': 'Insert Cell Below'
+            'command': 'jupyter-notebook:insert-cell-below'
+          }
+          {
+            'label': 'Delete Cell'
+            'command': 'jupyter-notebook:delete-cell'
+          }
+          {
+            'type': 'separator'
+          }
+          {
+            'label': 'Kernel Gateway'
+            'submenu': [
+              {
+                'label': 'Start Kernel Gateway'
+                'command': 'jupyter-notebook:start-kernel-gateway'
+              }
+              {
+                'label': 'Stop Kernel Gateway'
+                'command': 'jupyter-notebook:stop-kernel-gateway'
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+]
+```
+
+### keymaps/pulsar-jupyter-notebook.cson
+```coffeescript
+# Keymap for pulsar-jupyter-notebook package
+# These are Jupyter notebook style keybindings
+
+# Global shortcuts (when notebook is focused)
+'.notebook-editor':
+  # Cell execution
+  'shift-enter': 'jupyter-notebook:run-cell-and-select-next'
+  'ctrl-enter': 'jupyter-notebook:run-cell'
+  'alt-enter': 'jupyter-notebook:run-cell-and-insert-below'
+
+  # Cell management (command mode)
+  'a': 'jupyter-notebook:insert-cell-above'
+  'b': 'jupyter-notebook:insert-cell-below'
+  'd d': 'jupyter-notebook:delete-cell'
+  'x': 'jupyter-notebook:cut-cell'
+  'c': 'jupyter-notebook:copy-cell'
+  'v': 'jupyter-notebook:paste-cell-below'
+  'shift-v': 'jupyter-notebook:paste-cell-above'
+
+  # Cell type changes
+  'y': 'jupyter-notebook:change-cell-type-code'
+  'm': 'jupyter-notebook:change-cell-type-markdown'
+  'r': 'jupyter-notebook:change-cell-type-raw'
+
+  # Navigation
+  'up': 'jupyter-notebook:select-cell-above'
+  'down': 'jupyter-notebook:select-cell-below'
+  'k': 'jupyter-notebook:select-cell-above'
+  'j': 'jupyter-notebook:select-cell-below'
+
+  # Edit mode
+  'enter': 'jupyter-notebook:enter-edit-mode'
+  'escape': 'jupyter-notebook:enter-command-mode'
+
+  # Kernel operations
+  'i i': 'jupyter-notebook:interrupt-kernel'
+  '0 0': 'jupyter-notebook:restart-kernel'
+
+  # Save
+  'ctrl-s': 'core:save'
+  'cmd-s': 'core:save'
+
+# Windows/Linux specific
+'.platform-win32 .notebook-editor, .platform-linux .notebook-editor':
+  'ctrl-shift-enter': 'jupyter-notebook:run-cell-and-insert-below'
+  'ctrl-shift-p': 'command-palette:toggle'
+
+# macOS specific
+'.platform-darwin .notebook-editor':
+  'cmd-shift-enter': 'jupyter-notebook:run-cell-and-insert-below'
+  'cmd-shift-p': 'command-palette:toggle'
+
+# Code cell specific (when editing code)
+'.notebook-editor .notebook-cell.code-cell atom-text-editor':
+  'tab': 'jupyter-notebook:indent-or-complete'
+  'shift-tab': 'jupyter-notebook:show-tooltip'
+  'ctrl-/': 'editor:toggle-line-comments'
+  'cmd-/': 'editor:toggle-line-comments'
+
+# Markdown cell specific
+'.notebook-editor .notebook-cell.markdown-cell atom-text-editor':
+  'shift-enter': 'jupyter-notebook:render-markdown'
+  'ctrl-enter': 'jupyter-notebook:render-markdown'
+```
+
+### styles/notebook.less
+```less
+// Styles for pulsar-jupyter-notebook package
+
+.notebook-editor {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background: @base-background-color;
+
+  .notebook-header {
+    padding: 10px;
+    border-bottom: 1px solid @base-border-color;
+    background: @panel-heading-background-color;
+
+    .notebook-title {
+      font-size: 1.2em;
+      font-weight: bold;
+      color: @text-color-highlight;
+    }
+
+    .kernel-status {
+      float: right;
+      padding: 4px 8px;
+      border-radius: 3px;
+      font-size: 0.9em;
+
+      &.connected {
+        background: @background-color-success;
+        color: @text-color-success;
+      }
+
+      &.disconnected {
+        background: @background-color-error;
+        color: @text-color-error;
+      }
+    }
+  }
+
+  .notebook-cells {
+    flex: 1;
+    overflow-y: auto;
+    padding: 10px;
+  }
+
+  .notebook-cell {
+    margin-bottom: 15px;
+    border: 1px solid transparent;
+    border-radius: 4px;
+
+    &.selected {
+      border-color: @text-color-info;
+      box-shadow: 0 0 0 1px @text-color-info;
+    }
+
+    &.code-cell {
+      .cell-input {
+        border-left: 3px solid @text-color-info;
+        background: @inset-panel-background-color;
+      }
+
+      .cell-prompt {
+        background: @text-color-info;
+        color: @base-background-color;
+        padding: 2px 8px;
+        font-family: @font-family-monospace;
+        font-size: 0.9em;
+        min-width: 60px;
+        text-align: center;
+      }
+    }
+
+    &.markdown-cell {
+      .cell-input {
+        border-left: 3px solid @text-color-success;
+        background: @inset-panel-background-color;
+      }
+
+      .cell-prompt {
+        background: @text-color-success;
+        color: @base-background-color;
+        padding: 2px 8px;
+        font-family: @font-family-monospace;
+        font-size: 0.9em;
+        min-width: 60px;
+        text-align: center;
+      }
+
+      .markdown-preview {
+        padding: 10px;
+        background: @base-background-color;
+        border: 1px solid @base-border-color;
+        border-radius: 3px;
+
+        h1, h2, h3, h4, h5, h6 {
+          color: @text-color-highlight;
+        }
+
+        code {
+          background: @inset-panel-background-color;
+          padding: 2px 4px;
+          border-radius: 2px;
+          font-family: @font-family-monospace;
+        }
+
+        pre {
+          background: @inset-panel-background-color;
+          padding: 10px;
+          border-radius: 3px;
+          overflow-x: auto;
+
+          code {
+            background: none;
+            padding: 0;
+          }
+        }
+      }
+    }
+
+    .cell-output {
+      margin-top: 5px;
+      border-left: 3px solid @text-color-subtle;
+
+      .output-area {
+        padding: 5px 10px;
+        background: @inset-panel-background-color;
+        font-family: @font-family-monospace;
+        font-size: 0.9em;
+        white-space: pre-wrap;
+
+        &.output-error {
+          color: @text-color-error;
+          background: fadeout(@background-color-error, 90%);
+        }
+
+        &.output-stream {
+          color: @text-color;
+        }
+
+        &.output-display-data {
+          .output-html {
+            font-family: @font-family;
+          }
+
+          .output-image {
+            max-width: 100%;
+            height: auto;
+          }
+        }
+      }
+    }
+  }
+}
+
+// Toolbar styles
+.jupyter-toolbar {
+  padding: 5px 10px;
+  background: @panel-heading-background-color;
+  border-bottom: 1px solid @base-border-color;
+
+  .btn-group {
+    margin-right: 10px;
+  }
+
+  .btn {
+    font-size: 12px;
+    padding: 4px 8px;
+  }
+}
+
+// Status bar integration
+.jupyter-status {
+  cursor: pointer;
+
+  &:hover {
+    background: @button-background-color-hover;
+  }
+
+  .icon {
+    margin-right: 5px;
+  }
+}
+```
+
+### LICENSE
+```
+MIT License
+
+Copyright (c) 2025 Josen Tiamat
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+```
+
+### webpack.config.js
+```javascript
+const path = require('path');
+
+module.exports = {
+  entry: './lib/main.js',
+  output: {
+    path: path.resolve(__dirname, 'dist'),
+    filename: 'main.js',
+    libraryTarget: 'commonjs2'
+  },
+  target: 'electron-renderer',
+  module: {
+    rules: [
+      {
+        test: /\.jsx?$/,
+        exclude: /node_modules/,
+        use: {
+          loader: 'babel-loader',
+          options: {
+            presets: ['@babel/preset-env', '@babel/preset-react']
+          }
+        }
+      }
+    ]
+  },
+  resolve: {
+    extensions: ['.js', '.jsx']
+  },
+  externals: {
+    atom: 'atom',
+    electron: 'electron'
+  }
+};
+```
+
+## Setup Instructions:
+
+1. Create a new directory: `mkdir pulsar-jupyter-notebook`
+2. Copy each section above into the appropriate file
+3. Run: `npm install` to install dependencies
+4. Link for development: `ppm link`
+5. Test in Pulsar, then publish: `ppm publish`
+
+## Missing Components:
+You'll still need to copy/adapt these from the original atom-notebook:
+- lib/notebook-editor.js (main store logic)
+- lib/dispatcher.js (Flux dispatcher)
+- lib/components/*.js (React components)
+
+The structure above provides the complete Pulsar integration framework!
